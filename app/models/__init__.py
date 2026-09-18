@@ -1,1 +1,1 @@
-from .database import Tyre, TyreLocation
+from .tyre import Tyre, TyreLocation

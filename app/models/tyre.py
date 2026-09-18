@@ -12,6 +12,7 @@ class Tyre(TyreBase, table=True):
     id: int | None = Field(default=None, primary_key=True)
     cost_price: float = Field(gt=0)
     stock_total: int = Field(ge=0, default=0)
+    is_deleted : bool = Field(default=False)
 
 class TyreLocation(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
