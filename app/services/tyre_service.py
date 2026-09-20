@@ -1,6 +1,7 @@
 from sqlmodel import Session
-from app.models.tyre import TyreCreate, Tyre, TyreLocation
+from app.models.tyre import TyreCreate, Tyre, TyreLocation, TyreStockAdjustmentRequest
 from sqlmodel import select
+from app.dependencies.config import logger
 
 # =======================================================
 # VALIDATION CHECKS
@@ -82,6 +83,36 @@ def create_tyre_inventory(session: Session, payload: TyreCreate)->tuple[Tyre,Tyr
     session.add(db_tyre_loc)
     session.flush()
     return (db_tyre, db_tyre_loc)
+
+def calculate_new_stock_values(
+        db_tyre: Tyre, 
+        db_tyre_loc: TyreLocation, 
+        payload: TyreStockAdjustmentRequest
+        )-> tuple[dict,dict]:
+    """ Calculate new stock amounts and new cost price """
+    new_unit_stock = payload.stock_unit + db_tyre_loc.stock_unit
+    new_van_stock =  payload.stock_van + db_tyre_loc.stock_van
+
+    combine_stock_total = payload.stock_van + payload.stock_unit + db_tyre.stock_total
+
+    old_stock_value = db_tyre.cost_price * db_tyre.stock_total
+    new_stock_value = (payload.stock_unit + payload.stock_van) * payload.cost_price
+    if combine_stock_total > 0:
+        new_cost_price = round((old_stock_value + new_stock_value) / combine_stock_total,2)
+    else:
+        new_cost_price = db_tyre.cost_price
+    
+    updated_stock_loc = {
+        "stock_unit": new_unit_stock,
+        "stock_van": new_van_stock,
+        "in_unit": new_unit_stock > 0,
+        "in_van": new_van_stock > 0
+        }
+    updated_stock = {
+        "cost_price": new_cost_price,
+        "stock_total": new_unit_stock + new_van_stock
+    }
+    return (updated_stock_loc, updated_stock)
 
 # =======================================================
 # INVENTORY DELETIONS

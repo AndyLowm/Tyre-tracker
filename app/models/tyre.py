@@ -1,10 +1,11 @@
 from sqlmodel import SQLModel, Field
+from pydantic import BaseModel
 
 class TyreBase(SQLModel):
     make: str
     model: str
-    width: int = Field(index=True)
-    aspect_ratio: int
+    width: int = Field(index=True, gt=0 )
+    aspect_ratio: int = Field(gt=0)
     rim: int = Field(index=True)
     speed_rating: str
 
@@ -35,3 +36,14 @@ class TyreCreateConfirm(TyreBase):
     stock_unit: int
     cost_price: float
     stock_total: int
+
+class TyreStockAdjustmentRequest(BaseModel):
+    stock_van: int = Field(ge=0, default=0)
+    stock_unit: int = Field(ge=0, default=0)
+    cost_price: float = Field(gt=0)
+
+class TyreInventoryPublic(TyreBase):
+    new_cost_price: float = Field(gt=0)
+    new_stock_van: int = Field(ge=0, default=0)
+    new_stock_unit: int = Field(ge=0, default=0)
+    new_total_stock: int = Field(ge=0, default=0)
