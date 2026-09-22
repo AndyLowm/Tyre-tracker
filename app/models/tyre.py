@@ -1,5 +1,6 @@
-from sqlmodel import SQLModel, Field
+from sqlmodel import SQLModel, Field, Relationship
 from pydantic import BaseModel
+from typing import Annotated
 
 class TyreBase(SQLModel):
     make: str
@@ -12,38 +13,33 @@ class TyreBase(SQLModel):
 class Tyre(TyreBase, table=True):
     id: int | None = Field(default=None, primary_key=True)
     cost_price: float = Field(gt=0)
-    stock_total: int = Field(ge=0, default=0)
     is_deleted : bool = Field(default=False)
+    stocks: list["StockLocation"] = Relationship(back_populates="tyre")
 
-class TyreLocation(SQLModel, table=True):
+    @property
+    def stock_total(self):
+        return sum(item.amount for item in self.stocks)
+
+class StockLocation(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
-    tyre_id: int = Field(foreign_key="tyre.id")
-    in_van : bool = Field(default=False)
-    in_unit: bool = Field(default=False)
-    stock_van: int = Field(ge=0, default=0)
-    stock_unit: int = Field(ge=0, default=0)
+    tyre_id : int = Field(foreign_key="tyre.id")
+    location_name: str
+    amount: int = Field(default=0, ge=0)
+    tyre: Tyre = Relationship(back_populates="stocks")
 
 class TyreCreate(TyreBase):
     cost_price: float = Field(gt=0)
-    stock_van: int = Field(ge=0, default=0)
-    stock_unit: int = Field(ge=0, default=0)
+    location_stock: dict[str,int] = Field(default_factory=dict)
 
 class TyreCreateConfirm(TyreBase):
-    tyre_id: int = Field(foreign_key="tyre.id")
-    in_van : bool
-    in_unit: bool
-    stock_van: int
-    stock_unit: int
+    tyre_id: int 
     cost_price: float
     stock_total: int
 
 class TyreStockAdjustmentRequest(BaseModel):
-    stock_van: int = Field(ge=0, default=0)
-    stock_unit: int = Field(ge=0, default=0)
+    location_amount : dict[str,Annotated[int, Field(gt=0)]]
     cost_price: float = Field(gt=0)
 
 class TyreInventoryPublic(TyreBase):
-    new_cost_price: float = Field(gt=0)
-    new_stock_van: int = Field(ge=0, default=0)
-    new_stock_unit: int = Field(ge=0, default=0)
-    new_total_stock: int = Field(ge=0, default=0)
+    cost_price: float = Field(gt=0)
+    total_stock: int = Field(ge=0, default=0)

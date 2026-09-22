@@ -3,7 +3,7 @@ from fastapi import Depends
 from app.dependencies.config import settings
 from typing import Annotated
 #databse models
-from app.models import TyreLocation, Tyre
+from app.models import Tyre, StockLocation
 
 db_url = settings.database_url
 conn_args = {"check_same_thread": False} if db_url.startswith('sqlite') else {}

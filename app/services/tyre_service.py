@@ -1,5 +1,5 @@
 from sqlmodel import Session
-from app.models.tyre import TyreCreate, Tyre, TyreLocation, TyreStockAdjustmentRequest
+from app.models.tyre import TyreCreate, Tyre, StockLocation, TyreStockAdjustmentRequest
 from sqlmodel import select
 from app.dependencies.config import logger
 
@@ -23,7 +23,7 @@ def tyre_duplicate_check(session: Session, payload: TyreCreate)-> bool:
 
 def check_archived_tyre_record(session: Session, payload: TyreCreate) -> None | Tyre:
     """ Checks DB for archived tyre and returns it """
-    search_criteria = payload.model_dump(exclude={"id", "cost_price", "stock_van", "stock_unit"})
+    search_criteria = payload.model_dump(exclude={"cost_price", "location_stock"})
     search_criteria["is_deleted"] = True
     archived_tyre = session.exec(select(Tyre).filter_by(**search_criteria)).first()
     if not  archived_tyre:
@@ -34,85 +34,58 @@ def check_archived_tyre_record(session: Session, payload: TyreCreate) -> None | 
 # INVENTORY CREATIONS / UPDATES
 # =======================================================
 
-def create_db_tyre(payload: TyreCreate)-> Tyre:
-    """ Creates and returns Tyre model instance """
-    total_stock = payload.stock_unit + payload.stock_van    
-    tyre_dict = payload.model_dump(exclude={"stock_van", "stock_unit"})
-    tyre_dict["stock_total"] = total_stock
-    return Tyre(**tyre_dict)
-
-def update_archived_inventory(session: Session, payload: TyreCreate, archived_tyre: Tyre) -> tuple[Tyre, TyreLocation]:
+def update_archived_inventory(session: Session, payload: TyreCreate, archived_tyre: Tyre) -> Tyre:
     """ updates archived tyre in database and returns updated archived records or None"""          
-    total_stock = payload.stock_unit + payload.stock_van
-    archived_tyre.stock_total = total_stock
-    archived_tyre.cost_price = payload.cost_price
+    new_stock_dict = payload.location_stock
     archived_tyre.is_deleted = False
-    session.add(archived_tyre)
+    archived_tyre.cost_price = payload.cost_price
 
-    archived_tyre_loc = session.exec(select(TyreLocation).where(TyreLocation.tyre_id == archived_tyre.id)).first()
-    if not archived_tyre_loc:
-        archived_tyre_loc = TyreLocation(
-            tyre_id= archived_tyre.id,
-            in_van= payload.stock_van > 0,
-            in_unit= payload.stock_unit > 0,
-            stock_unit= payload.stock_unit,
-            stock_van= payload.stock_van
-        )
-    archived_tyre_loc.stock_van = payload.stock_van
-    archived_tyre_loc.stock_unit = payload.stock_unit
-    archived_tyre_loc.in_unit = payload.stock_unit > 0
-    archived_tyre_loc.in_van = payload.stock_van > 0
-    session.add(archived_tyre_loc)
+    for loc, amount in new_stock_dict.items():
+        existing_loc = next((s for s in archived_tyre.stocks if s.location_name == loc),None)
+        if existing_loc:
+            existing_loc.amount = amount
+        else:
+            new_row = StockLocation(
+                tyre_id = archived_tyre.id,
+                location_name= loc,
+                amount= amount
+            )
+            archived_tyre.stocks.append(new_row) 
+    return archived_tyre
 
-    return (archived_tyre, archived_tyre_loc)
-
-def create_tyre_inventory(session: Session, payload: TyreCreate)->tuple[Tyre,TyreLocation]:
+def create_tyre_inventory(payload: TyreCreate)->Tyre:
     """ adds tyre and stock info to both tables in databse """
-    db_tyre = create_db_tyre(payload)
-    session.add(db_tyre)
-    session.flush()
-
-    db_tyre_loc = TyreLocation(
-        tyre_id= db_tyre.id,
-        stock_unit= payload.stock_unit,
-        stock_van= payload.stock_van,
-        in_van= payload.stock_van > 0,
-        in_unit= payload.stock_unit > 0
-    )
-
-    session.add(db_tyre_loc)
-    session.flush()
-    return (db_tyre, db_tyre_loc)
+    stocks = [StockLocation(location_name= loc, amount= amount) for loc, amount in payload.location_stock.items()]
+    new_tyre_dict = payload.model_dump(exclude={"location_stock"})
+    new_tyre_dict['stocks'] = stocks
+    new_tyre = Tyre(**new_tyre_dict)
+    return new_tyre
 
 def calculate_new_stock_values(
         db_tyre: Tyre, 
-        db_tyre_loc: TyreLocation, 
         payload: TyreStockAdjustmentRequest
-        )-> tuple[dict,dict]:
+        )-> None:
     """ Calculate new stock amounts and new cost price """
-    new_unit_stock = payload.stock_unit + db_tyre_loc.stock_unit
-    new_van_stock =  payload.stock_van + db_tyre_loc.stock_van
-
-    combine_stock_total = payload.stock_van + payload.stock_unit + db_tyre.stock_total
-
+    new_stock_value = sum(payload.location_amount.values())*payload.cost_price
+    total_stock = db_tyre.stock_total + sum(payload.location_amount.values())
     old_stock_value = db_tyre.cost_price * db_tyre.stock_total
-    new_stock_value = (payload.stock_unit + payload.stock_van) * payload.cost_price
-    if combine_stock_total > 0:
-        new_cost_price = round((old_stock_value + new_stock_value) / combine_stock_total,2)
+    if total_stock > 0:
+        new_cost_price = round(( (new_stock_value + old_stock_value)/ total_stock ),2)
     else:
         new_cost_price = db_tyre.cost_price
-    
-    updated_stock_loc = {
-        "stock_unit": new_unit_stock,
-        "stock_van": new_van_stock,
-        "in_unit": new_unit_stock > 0,
-        "in_van": new_van_stock > 0
-        }
-    updated_stock = {
-        "cost_price": new_cost_price,
-        "stock_total": new_unit_stock + new_van_stock
-    }
-    return (updated_stock_loc, updated_stock)
+    db_tyre.cost_price = new_cost_price
+
+    for loc, amount in payload.location_amount.items():
+        location = next((l for l in db_tyre.stocks if l.location_name == loc), None )
+        if location:
+            location.amount += amount
+        else:
+            new_loc = StockLocation(
+                location_name=loc,
+                amount= amount
+            )
+            db_tyre.stocks.append(new_loc)
+    return
 
 # =======================================================
 # INVENTORY DELETIONS

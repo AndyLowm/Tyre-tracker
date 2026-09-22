@@ -1,1 +1,1 @@
-from .tyre import Tyre, TyreLocation
+from .tyre import Tyre, StockLocation

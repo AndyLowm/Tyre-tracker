@@ -13,7 +13,7 @@ from app.dependencies.database import Session_Dep
 from typing import Annotated
 from app.models.tyre import (
     Tyre, 
-    TyreLocation, 
+    StockLocation, 
     TyreCreate, 
     TyreCreateConfirm,
     TyreStockAdjustmentRequest,
@@ -35,17 +35,17 @@ async def add_tyre(
                             detail=f"The tyre specification '{payload.make} {payload.model}' already exists.")
     archived_tyre = check_archived_tyre_record(session, payload)
     if archived_tyre:
-         db_tyre, db_tyre_loc = update_archived_inventory(session, payload, archived_tyre)
+         db_tyre = update_archived_inventory(session, payload, archived_tyre)
     else:
-        db_tyre, db_tyre_loc = create_tyre_inventory(session, payload)
+        db_tyre = create_tyre_inventory(payload)
+    session.add(db_tyre)
     session.commit()
     session.refresh(db_tyre)
-    session.refresh(db_tyre_loc)
-    tyre_confirm_dict = db_tyre.model_dump(exclude={"id", "is_deleted"})
-    tyre_loc_confirm_dict = db_tyre_loc.model_dump(exclude={"id"})
-    combined_confim = tyre_confirm_dict | tyre_loc_confirm_dict
-    return TyreCreateConfirm(**combined_confim)
-
+    public_dict = db_tyre.model_dump(exclude={"id", "stocks", "is_deleted"})
+    public_dict["tyre_id"] = db_tyre.id
+    public_dict["stock_total"] = db_tyre.stock_total
+    return TyreCreateConfirm(**public_dict)
+#update rest of routes
 @router.delete(
         "/remove-tyre/{tyre_id}",
         status_code=status.HTTP_200_OK)
@@ -60,7 +60,7 @@ async def delete_tyre(
         logger.warning(msg=f"Tyre deletion from databse failed as tyre_id: {tyre_id} not found")
         raise HTTPException(
             status_code= status.HTTP_400_BAD_REQUEST,
-            detail= "Tyre id not found in database"
+            detail= "Tyre id not found"
             )
     msg = delete_tyre_record(db_tyre, session)
     session.commit()
@@ -80,34 +80,11 @@ async def add_stock(
     if not db_tyre:
         logger.warning(msg="Stock update failed as tyre_id not found")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tyre does not exist")
-    
-    db_tyre_loc = session.exec(select(TyreLocation).where(TyreLocation.tyre_id == tyre_id)).first()
-    if not db_tyre_loc:
-        logger.warning(msg=f"TyreLocation record missing for tyre_id: {tyre_id}")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="record information missing for tyre id")
 
-    updated_stock_loc, updated_stock = calculate_new_stock_values(db_tyre, db_tyre_loc,payload)
-
-    db_tyre_loc.sqlmodel_update(updated_stock_loc)
-    db_tyre.sqlmodel_update(updated_stock)
-    session.add(db_tyre_loc)
+    calculate_new_stock_values(db_tyre,payload)
     session.add(db_tyre)
     session.commit()
-
     session.refresh(db_tyre)
-    session.refresh(db_tyre_loc)
-
-    missing_keys = {
-        "new_cost_price": db_tyre.cost_price,
-        "new_stock_van": db_tyre_loc.stock_van,
-        "new_stock_unit": db_tyre_loc.stock_unit,
-        "new_total_stock": db_tyre.stock_total,
-    }
-
-    public_dict = (
-        db_tyre.model_dump(
-            exclude={"id", "cost_price", "stock_total", "is_deleted"}
-        )
-        | missing_keys
-    )
+    public_dict = db_tyre.model_dump(exclude={"id", "is_deleted"})
+    public_dict["total_stock"] = db_tyre.stock_total
     return TyreInventoryPublic(**public_dict)
