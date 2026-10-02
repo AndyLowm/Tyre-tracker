@@ -1,6 +1,23 @@
 from sqlmodel import SQLModel, Field, Relationship
 from pydantic import BaseModel
 from typing import Annotated
+# refactor routes and sessions taking in to account the 2 new tables of Account and AccountPrices
+#Also note that cost_price has been removed from the Tyre class
+class Account(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    acc_name: str
+
+class User(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    username: str = Field(unique=True, index=True) 
+    hash_pw: str
+    acc_id: int = Field(foreign_key="account.id")
+
+class AccountPrices(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    tyre_id: int = Field(foreign_key="tyre.id")
+    acc_id: int = Field(foreign_key="account.id")
+    cost_price: float = Field(ge=0)
 
 class TyreBase(SQLModel):
     make: str
@@ -12,17 +29,14 @@ class TyreBase(SQLModel):
 
 class Tyre(TyreBase, table=True):
     id: int | None = Field(default=None, primary_key=True)
-    cost_price: float = Field(gt=0)
-    is_deleted : bool = Field(default=False)
     stocks: list["StockLocation"] = Relationship(back_populates="tyre")
-
-    @property
-    def stock_total(self):
-        return sum(item.amount for item in self.stocks)
+    def get_stock_total(self, acc_id: int) -> int:
+        return sum(item.amount for item in self.stocks if item.acc_id == acc_id)
 
 class StockLocation(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     tyre_id : int = Field(foreign_key="tyre.id")
+    acc_id: int = Field(foreign_key="account.id")
     location_name: str
     amount: int = Field(default=0, ge=0)
     tyre: Tyre = Relationship(back_populates="stocks")

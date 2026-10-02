@@ -1,100 +1,172 @@
 from sqlmodel import Session
-from app.models.tyre import TyreCreate, Tyre, StockLocation, TyreStockAdjustmentRequest
+from app.models.tyre import TyreCreate, Tyre, StockLocation, TyreStockAdjustmentRequest, TyreBase, TyreCreateConfirm, AccountPrices
 from sqlmodel import select
 from app.dependencies.config import logger
+from typing import TypedDict
 
 # =======================================================
 # VALIDATION CHECKS
 # =======================================================
-def tyre_duplicate_check(session: Session, payload: TyreCreate)-> bool:
-    """ Checks if tyres exists in database"""
-    duplicate_check = session.exec(
-    select(Tyre).where(
-        Tyre.make == payload.make,
-        Tyre.model == payload.model,
-        Tyre.width == payload.width,
-        Tyre.aspect_ratio == payload.aspect_ratio,
-        Tyre.rim == payload.rim,
-        Tyre.speed_rating == payload.speed_rating,
-        Tyre.is_deleted == False
-    )
-    ).first()
-    return bool(duplicate_check)
+class CpCalcDict(TypedDict, total=False):
+    old_stock: int
+    new_stock: int
+    new_cost: float
+    old_cost: float
+    total: int
 
-def check_archived_tyre_record(session: Session, payload: TyreCreate) -> None | Tyre:
-    """ Checks DB for archived tyre and returns it """
-    search_criteria = payload.model_dump(exclude={"cost_price", "location_stock"})
-    search_criteria["is_deleted"] = True
-    archived_tyre = session.exec(select(Tyre).filter_by(**search_criteria)).first()
-    if not  archived_tyre:
-        return None 
-    return archived_tyre
-
-# =======================================================
-# INVENTORY CREATIONS / UPDATES
-# =======================================================
-
-def update_archived_inventory(session: Session, payload: TyreCreate, archived_tyre: Tyre) -> Tyre:
-    """ updates archived tyre in database and returns updated archived records or None"""          
-    new_stock_dict = payload.location_stock
-    archived_tyre.is_deleted = False
-    archived_tyre.cost_price = payload.cost_price
-
-    for loc, amount in new_stock_dict.items():
-        existing_loc = next((s for s in archived_tyre.stocks if s.location_name == loc),None)
-        if existing_loc:
-            existing_loc.amount = amount
+class TyreService():
+    """ Service layer logic for inventory """
+    @staticmethod
+    def get_tyre_data(session: Session, payload: TyreBase)-> Tyre | None:
+        """ Returns Tyre data if exisits in database  """
+        duplicate_check = session.exec(
+        select(Tyre).where(
+            Tyre.make == payload.make,
+            Tyre.model == payload.model,
+            Tyre.width == payload.width,
+            Tyre.aspect_ratio == payload.aspect_ratio,
+            Tyre.rim == payload.rim,
+            Tyre.speed_rating == payload.speed_rating,
+        )
+        ).first()
+        return duplicate_check
+    
+    @classmethod
+    def get_or_create_tyre_entry(cls, session: Session, payload: TyreBase) -> Tyre:
+        """ If tyre doesnt exist, creates it and flushes database """
+        tyre = cls.get_tyre_data(session, payload)
+        if not tyre:
+            tyre_data = Tyre(**payload.model_dump())
+            session.add(tyre_data)
+            session.flush()
         else:
-            new_row = StockLocation(
-                tyre_id = archived_tyre.id,
-                location_name= loc,
-                amount= amount
-            )
-            archived_tyre.stocks.append(new_row) 
-    return archived_tyre
+            tyre_data = tyre
+        return tyre_data
+    
+    @staticmethod
+    def create_cp_dict(
+        old_stock: int, 
+        new_location_stock: dict[str,int],
+        new_cost_price: float,
+        old_cost_price: float
+        )-> CpCalcDict:
+        """ Creates cost price dict for calculations """
+        old_stock_total = old_stock
+        new_stock_total = sum(new_location_stock.values())
+        cp_calc = {
+            "old_stock": old_stock_total,
+            "new_stock": new_stock_total,
+            "new_cost": new_cost_price,
+            "old_cost": old_cost_price,
+            "total": old_stock_total + new_stock_total
+            }
+        return cp_calc
+    
+    @staticmethod
+    def create_tyre_confirm_model(
+        tyre_data: Tyre,
+        cost_price: float,
+        stock_total: int
+    )-> TyreCreateConfirm:
+        """ Creates a tyre cofirmation model """
+        tyre_confirm = tyre_data.model_dump(exclude={"id", "stocks"})
+        tyre_confirm["tyre_id"] = tyre_data.id
+        tyre_confirm["cost_price"] = cost_price
+        tyre_confirm["stock_total"] = stock_total
+        return TyreCreateConfirm(**tyre_confirm)
+    
+    @staticmethod
+    def get_account_price(session: Session, acc_id: int, tyre_id: int)-> AccountPrices | None:
+        """ Gets account prices model with matching acc_id and tyre_id """
+        account_p = session.exec(
+            select(AccountPrices)
+            .where(AccountPrices.tyre_id == tyre_id)
+            .where(AccountPrices.acc_id == acc_id)
+            ).first()
+        return account_p
 
-def create_tyre_inventory(payload: TyreCreate)->Tyre:
-    """ adds tyre and stock info to both tables in databse """
-    stocks = [StockLocation(location_name= loc, amount= amount) for loc, amount in payload.location_stock.items()]
-    new_tyre_dict = payload.model_dump(exclude={"location_stock"})
-    new_tyre_dict['stocks'] = stocks
-    new_tyre = Tyre(**new_tyre_dict)
-    return new_tyre
-
-def calculate_new_stock_values(
-        db_tyre: Tyre, 
-        payload: TyreStockAdjustmentRequest
+    @staticmethod
+    def create_and_update_stock_location_rows(
+        session: Session, 
+        tyre_data: Tyre, 
+        acc_id: int, 
+        location_stock: dict[str,int]
         )-> None:
-    """ Calculate new stock amounts and new cost price """
-    new_stock_value = sum(payload.location_amount.values())*payload.cost_price
-    total_stock = db_tyre.stock_total + sum(payload.location_amount.values())
-    old_stock_value = db_tyre.cost_price * db_tyre.stock_total
-    if total_stock > 0:
-        new_cost_price = round(( (new_stock_value + old_stock_value)/ total_stock ),2)
-    else:
-        new_cost_price = db_tyre.cost_price
-    db_tyre.cost_price = new_cost_price
-
-    for loc, amount in payload.location_amount.items():
-        location = next((l for l in db_tyre.stocks if l.location_name == loc), None )
-        if location:
-            location.amount += amount
-        else:
-            new_loc = StockLocation(
-                location_name=loc,
-                amount= amount
+        """ Creates and updates stock amount rows in StockLocation table """
+        existing_stock = {s.location_name: s for s in tyre_data.stocks if s.acc_id == acc_id}
+        for loc, amount in location_stock.items():
+            if loc in existing_stock:
+                existing_stock[loc].amount += amount
+                session.add(existing_stock[loc])
+            else:
+                new_loc_row = StockLocation(
+                    tyre_id= tyre_data.id,
+                    acc_id= acc_id,
+                    location_name= loc,
+                    amount= amount
+                )
+                session.add(new_loc_row)
+        return
+    
+    @classmethod
+    def create_or_update_account_price(
+        cls, session: Session, 
+        acc_id: int,
+        tyre_id: int,
+        new_cost_price: float,
+        new_location_stock: dict[str,int],
+        old_stock_total: int
+        )-> AccountPrices:
+        """ Checks if the account price record exists, or creates it and returns updated account price record """
+        account_p = cls.get_account_price(session, acc_id, tyre_id)
+        if not account_p:
+            updated_account_p = AccountPrices(
+                tyre_id= tyre_id,
+                acc_id= acc_id,
+                cost_price= new_cost_price
             )
-            db_tyre.stocks.append(new_loc)
-    return
+            session.add(updated_account_p)
+        else:
+            cp_dict = cls.create_cp_dict(old_stock_total, new_location_stock, new_cost_price, account_p.cost_price)
+            account_p.cost_price = cls.calc_new_cost_price(cp_dict)
+            updated_account_p = account_p
+            session.add(updated_account_p)
+        return updated_account_p
+    
+    @staticmethod
+    def calc_new_cost_price(cp_dict: CpCalcDict):
+            """Calculates new weighted cost price of tyre """
+            new_stock = cp_dict['new_cost'] * cp_dict['new_stock']
+            old_stock = cp_dict['old_cost'] * cp_dict['old_stock']
+            total_stock = new_stock + old_stock
+            if cp_dict['total'] > 0:
+                new_price = round(total_stock / cp_dict["total"], 2)
+            else:
+                new_price = cp_dict['old_cost']
+            return new_price
+    
+    @classmethod
+    def add_tyre_master(cls, session: Session, payload: TyreCreate, acc_id: int)->TyreCreateConfirm:
+        """ Master plan for adding tyre to database """
+        tyre_data = cls.get_or_create_tyre_entry(session, payload)
+        old_stock_total = tyre_data.get_stock_total(acc_id)
 
-# =======================================================
-# INVENTORY DELETIONS
-# =======================================================
+        cls.create_and_update_stock_location_rows(session, tyre_data, acc_id, payload.location_stock)
 
-def delete_tyre_record(db_tyre: Tyre, session: Session)-> dict[str,str]:
-    """ Soft Tyre delete from database """
+        updated_account_p = cls.create_or_update_account_price(
+            session,
+            acc_id,
+            tyre_data.id,
+            payload.cost_price,
+            payload.location_stock,
+            old_stock_total
+            )
 
-    msg = f"{db_tyre.make} {db_tyre.model} - {db_tyre.width}/{db_tyre.aspect_ratio}R{db_tyre.rim} deleted"
-    db_tyre.is_deleted = True
-    session.add(db_tyre)
-    return {"status": "Succesfully deleted","msg": msg}
+        tyre_confirm = cls.create_tyre_confirm_model(
+            tyre_data,
+            updated_account_p.cost_price,
+            tyre_data.get_stock_total(acc_id)
+        )
+        return tyre_confirm
+    
+

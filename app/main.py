@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from app.app_info import description, title
-from app.routers import tyres, views
+from app.routers import tyres, views, logins
 from contextlib import asynccontextmanager
 from app.dependencies.database import create_db_and_tables
 
@@ -22,3 +22,4 @@ app.mount('/static', StaticFiles(directory='app/static'), name='static')
 # Add webpage router and remove from schema
 app.include_router(views.router, include_in_schema=False)
 app.include_router(tyres.router)
+app.include_router(logins.router)
