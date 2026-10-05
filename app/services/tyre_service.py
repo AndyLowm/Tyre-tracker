@@ -1,5 +1,15 @@
 from sqlmodel import Session
-from app.models.tyre import TyreCreate, Tyre, StockLocation, TyreStockAdjustmentRequest, TyreBase, TyreCreateConfirm, AccountPrices
+from app.models.tyre import (
+    TyreCreate, 
+    Tyre, 
+    StockLocation, 
+    TyreStockAdjustmentRequest, 
+    TyreStockAdjustment,
+    TyreBase, 
+    TyreCreateConfirm, 
+    AccountPrices,
+    TyreInventoryPublic,
+    TyreStockPublic)
 from sqlmodel import select
 from app.dependencies.config import logger
 from typing import TypedDict
@@ -82,25 +92,32 @@ class TyreService():
             select(AccountPrices)
             .where(AccountPrices.tyre_id == tyre_id)
             .where(AccountPrices.acc_id == acc_id)
+            .with_for_update()
             ).first()
         return account_p
 
     @staticmethod
     def create_and_update_stock_location_rows(
         session: Session, 
-        tyre_data: Tyre, 
+        tyre_id: int, 
         acc_id: int, 
         location_stock: dict[str,int]
         )-> None:
         """ Creates and updates stock amount rows in StockLocation table """
-        existing_stock = {s.location_name: s for s in tyre_data.stocks if s.acc_id == acc_id}
+        locked_stocks = session.exec(
+            select(StockLocation)
+            .where(StockLocation.tyre_id == tyre_id)
+            .where(StockLocation.acc_id == acc_id)
+            .with_for_update()
+            ).all()
+        existing_stock = {s.location_name: s for s in locked_stocks}
         for loc, amount in location_stock.items():
             if loc in existing_stock:
                 existing_stock[loc].amount += amount
                 session.add(existing_stock[loc])
             else:
                 new_loc_row = StockLocation(
-                    tyre_id= tyre_data.id,
+                    tyre_id= tyre_id,
                     acc_id= acc_id,
                     location_name= loc,
                     amount= amount
@@ -151,7 +168,7 @@ class TyreService():
         tyre_data = cls.get_or_create_tyre_entry(session, payload)
         old_stock_total = tyre_data.get_stock_total(acc_id)
 
-        cls.create_and_update_stock_location_rows(session, tyre_data, acc_id, payload.location_stock)
+        cls.create_and_update_stock_location_rows(session, tyre_data.id, acc_id, payload.location_stock)
 
         updated_account_p = cls.create_or_update_account_price(
             session,
@@ -168,5 +185,57 @@ class TyreService():
             tyre_data.get_stock_total(acc_id)
         )
         return tyre_confirm
+    
+    @classmethod
+    def add_tyre_stock_master(
+        cls, session: Session, 
+        acc_id: int,
+        tyre_data: Tyre,
+        payload: TyreStockAdjustmentRequest
+        )-> TyreInventoryPublic:
+        """ Master tyre addition flow """
+        old_stock_total = tyre_data.get_stock_total(acc_id)
+
+        cls.create_and_update_stock_location_rows(
+            session, tyre_data.id, acc_id, payload.location_amount
+        )
+        AccountP = cls.create_or_update_account_price(
+            session, acc_id, 
+            tyre_data.id, 
+            payload.cost_price,payload.location_amount, 
+            old_stock_total
+        )
+        
+        public_tyre_dict = tyre_data.model_dump(exclude={"id", "stocks"}) | {"cost_price": AccountP.cost_price}
+        public_tyre_dict["total_stock"] = tyre_data.get_stock_total(acc_id) 
+        return TyreInventoryPublic(**public_tyre_dict)
+    
+    @classmethod
+    def remove_stock_master(
+        cls, session: Session,
+        payload: TyreStockAdjustment,
+        acc_id: int,
+        tyre_id: int
+        )-> TyreStockPublic:
+
+        locked_stocks = session.exec(
+            select(StockLocation)
+            .where(StockLocation.tyre_id == tyre_id)
+            .where(StockLocation.acc_id == acc_id)
+            .with_for_update()
+        ).all()
+
+        exisiting_stocks = {s.location_name: s for s in locked_stocks}
+        for loc, amount in payload.location_amount.items():
+            if loc not in exisiting_stocks:
+                raise ValueError("Location doesnt exist")
+            if amount > exisiting_stocks[loc].amount:
+                raise ValueError(f"Not enough stock in {loc}")  
+            exisiting_stocks[loc].amount -= amount
+            session.add(exisiting_stocks[loc])
+
+        new_stock_total = sum(s.amount for s in exisiting_stocks.values())
+        new_stocks = {loc: s.amount for loc, s in exisiting_stocks.items()}
+        return TyreStockPublic(stock_locations=new_stocks, total_stock=new_stock_total)
     
 

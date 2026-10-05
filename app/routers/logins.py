@@ -10,6 +10,7 @@ from app.models.auth import SignUp
 from sqlmodel import select
 from app.dependencies.config import logger
 from datetime import timedelta
+import json
 router = APIRouter(tags=["login"])
 
 # --------------------------------------------------------------
@@ -28,9 +29,12 @@ async def get_token(
     username, password = form_data.username, form_data.password
     verified, acc_id = verify_user(session, username, password)
     if not verified:
-        client_ip = request.client.host if request.client else "UNKNOWN"
+        client_data = {
+            "client_ip": request.client.host if request.client else "UNKNOWN"
+        }
+        json_client_ip = json.dumps(client_data)
         logger.warning(
-            msg=f"failed log in attempt CLIENT_IP: {client_ip}, attempted USERNAME: {username}"
+            msg= json_client_ip
             )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, 

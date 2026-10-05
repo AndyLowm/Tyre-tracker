@@ -50,9 +50,15 @@ class TyreCreateConfirm(TyreBase):
     cost_price: float
     stock_total: int
 
-class TyreStockAdjustmentRequest(BaseModel):
+class TyreStockAdjustment(BaseModel):
     location_amount : dict[str,Annotated[int, Field(gt=0)]]
+
+class TyreStockAdjustmentRequest(TyreStockAdjustment):
     cost_price: float = Field(gt=0)
+
+class TyreStockPublic(BaseModel):
+    stock_locations: dict[str,int]
+    total_stock: int
 
 class TyreInventoryPublic(TyreBase):
     cost_price: float = Field(gt=0)

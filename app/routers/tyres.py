@@ -11,8 +11,10 @@ from app.models.tyre import (
     TyreCreate, 
     TyreCreateConfirm,
     TyreStockAdjustmentRequest,
+    TyreStockAdjustment,
     TyreInventoryPublic,
-    AccountPrices
+    AccountPrices,
+    TyreStockPublic
     )
 router = APIRouter(tags=["Tyres"], prefix="/tyre")
 #refactor this!
@@ -43,16 +45,36 @@ async def add_stock(
     
     tyre_data = session.get(Tyre,tyre_id)
     if not tyre_data:
-        logger.warning(msg="Stock update failed as tyre_id not found")
+        logger.info(msg="Stock update failed as tyre_id not found")
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tyre does not exist")
 
-    old_stock_total = tyre_data.get_stock_total(acc_id)
-
-    TyreService.create_and_update_stock_location_rows(
-        session, tyre_data, acc_id, payload.location_amount
+    public_tyre_payload = TyreService.add_tyre_stock_master(
+        session,
+        acc_id,
+        tyre_data,
+        payload
     )
-    AccountP = TyreService.create_or_update_account_price(session,acc_id,tyre_id,payload.cost_price,payload.location_amount,old_stock_total)
-    public_tyre_dict = tyre_data.model_dump(exclude={"id", "stocks"}) | {"cost_price": AccountP.cost_price}
-    public_tyre_dict["total_stock"] = tyre_data.get_stock_total(acc_id) 
     session.commit()
-    return TyreInventoryPublic(**public_tyre_dict)
+    return public_tyre_payload
+
+@router.post('' \
+'remove-stock/{tyre_id}', 
+status_code= status.HTTP_200_OK,
+response_model= TyreStockPublic
+)
+async def remove_stock(
+    session: Session_Dep,
+    tyre_id: Annotated[int, Path()],
+    acc_id: Annotated[int, Depends(get_acc_id)],
+    payload: TyreStockAdjustment
+)-> TyreStockPublic:
+    tyre_data = session.get(Tyre,tyre_id)
+    if not tyre_data:
+        logger.info(msg="Stock update failed as tyre_id not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tyre does not exist")
+    try:
+        updated_tyre_public = TyreService.remove_stock_master(session, payload, acc_id, tyre_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail= str(e))
+    session.commit()
+    return updated_tyre_public
