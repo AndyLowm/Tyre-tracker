@@ -1,1 +1,5 @@
-from .tyre import Tyre, StockLocation, Account, AccountPrices, User
+from .tyre import (
+    StockLocation,
+    Tyre
+)
+from .account import Account, AccountPrices, User

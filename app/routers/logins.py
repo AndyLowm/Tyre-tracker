@@ -2,11 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
 from typing import Annotated
 from app.dependencies.auth_flow import get_acc_id
 from app.services.jwt_service import gen_token
-from app.services.auth_service import create_user_account, verify_user
+from app.services import auth_service as AuthService
 from fastapi.security import OAuth2PasswordRequestForm
 from app.dependencies.database import Session_Dep
 from app.models import User, Account
-from app.models.auth import SignUp
+from app.schemas.auth import SignUp
 from sqlmodel import select
 from app.dependencies.config import logger
 from datetime import timedelta
@@ -27,7 +27,7 @@ async def get_token(
     request: Request
 )->dict[str,str]:
     username, password = form_data.username, form_data.password
-    verified, acc_id = verify_user(session, username, password)
+    verified, acc_id = AuthService.verify_user(session, username, password)
     if not verified:
         client_data = {
             "client_ip": request.client.host if request.client else "UNKNOWN"
@@ -61,13 +61,13 @@ async def signup(
     session: Session_Dep,
     form_data: SignUp
 )-> dict[str,str]:
-    username, password = form_data.username, form_data.password
+    username, password = AuthService.normalise_string(form_data.username), form_data.password
     user_exists = session.exec(select(User).where(User.username == username)).first()
     if user_exists:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Sign up failed"
             )
-    create_user_account(session, username, password)
+    AuthService.create_user_account(session, username, password)
     session.commit()
     return {"msg": "Sign up succesfull"}
