@@ -275,5 +275,47 @@ def tyre_search(
         tyre_dict["cost_price"] = cp
         tyre_list.append(tyre_dict)
     return tyre_list
-    
 
+def get_tyre_by_id(session: Session, tyre_id: int, acc_id: int) -> dict[str,int]:
+    """
+    Get stock data of tyre via tyre id and acc id
+    
+    Error handling:
+        Raises LookupError if tyre or acc not found
+    """
+    statement = select(models.StockLocation)
+    statement = statement.where((models.StockLocation.tyre_id == tyre_id) & (models.StockLocation.acc_id == acc_id))
+    stock_data = session.exec(statement).all()
+    if not stock_data:
+        raise LookupError("No stocks found")
+    stocks = {}
+    for stock in stock_data:
+        stocks[stock.location_name] = stock.amount
+    return stocks
+
+def move_stock(session: Session, tyre_id: int, acc_id: int, payload: schemas.StockMove)-> dict[str,models.StockLocation]:  
+    """ 
+    Moves stock from one location to another if both locations exist
+    
+    Errors:
+        LookupError for non existing/Invalid locations
+
+        ValueError for invalid stock levels
+    """      
+    if payload.from_loc == payload.to_loc:
+        raise LookupError("Cannot move stock from current location to current location")
+    
+    statement = select(models.StockLocation)
+    statement = statement.where(
+        (models.StockLocation.acc_id == acc_id) & (models.StockLocation.tyre_id == tyre_id)
+        )
+    statement = statement.where(models.StockLocation.location_name.in_( (payload.from_loc, payload.to_loc) ))
+    locations_data = session.exec(statement).all()
+    if len(locations_data) < 2:
+        raise LookupError("Invalid locations")
+    loc_dict = {loc.location_name: loc for loc in locations_data}
+    if loc_dict[payload.from_loc].amount < payload.amount:
+        raise ValueError("Not enough stock!")
+    loc_dict[payload.from_loc].amount -= payload.amount
+    loc_dict[payload.to_loc].amount += payload.amount
+    return loc_dict

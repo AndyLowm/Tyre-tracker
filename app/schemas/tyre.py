@@ -38,11 +38,18 @@ class TyreStockAdjustment(BaseModel):
 class TyreStockAdjustmentRequest(TyreStockAdjustment):
     cost_price: float = Field(gt=0)
 
-class TyreStockPublic(BaseModel):
+class TyreStockPublicBase(BaseModel):
     stock_locations: dict[normalised_string, int]
+
+class TyreStockPublic(TyreStockPublicBase):
     total_stock: int
 
 class TyreInventoryPublic(TyreBase):
     cost_price: float = Field(gt=0)
     total_stock: int = Field(ge=0, default=0)
+
+class StockMove(BaseModel):
+    from_loc: normalised_string
+    to_loc: normalised_string
+    amount: int
 

@@ -49,7 +49,7 @@ async def add_stock(
     session.commit()
     return public_tyre_payload
 
-@router.post('' \
+@router.patch(
 '/remove-stock/{tyre_id}', 
 status_code= status.HTTP_200_OK,
 response_model= schemas.TyreStockPublic
@@ -88,6 +88,52 @@ async def search_for_tyre(
     except LookupError as e:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail= str(e))
     return tyre_list
+
+router.get(
+    '/check-stock/{tyre_id}',
+    status_code= status.HTTP_200_OK,
+    response_model= schemas.TyreStockPublic
+    )
+async def get_tyre_stocks(
+        session: Session_Dep,
+        acc_id: Annotated[int, Depends(get_acc_id)],
+        tyre_id: Annotated[int, Path()]
+) -> schemas.TyreStockPublic:
+    try:
+        tyre_stocks = TyreService.get_tyre_by_id(session, tyre_id, acc_id)
+    except LookupError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail= str(e))
+    stock_public = schemas.TyreStockPublic(
+        stock_locations= tyre_stocks,
+        total_stock= sum(n for n in tyre_stocks.values())
+        )
+    return stock_public
+
+@router.patch(
+        '/move-stock/{tyre_id}', 
+        status_code=status.HTTP_200_OK,
+        response_model= schemas.TyreStockPublicBase
+        )
+async def move_stock(
+    session: Session_Dep,
+    acc_id: Annotated[int, Depends(get_acc_id)],
+    tyre_id: Annotated[int, Path()],
+    payload: schemas.StockMove
+)-> schemas.TyreStockPublicBase:
+    try:
+        stocks = TyreService.move_stock(
+            session,
+            tyre_id,
+            acc_id,
+            payload
+        )
+    except (LookupError, ValueError) as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail= str(e))
+    public_stock = schemas.TyreStockPublicBase(
+        stock_locations= {name: loc.amount for name, loc in stocks.items()}
+    )
+    session.commit()
+    return public_stock
 # Routes
 # move stock    
 # display individual tyre stocks

@@ -7,5 +7,7 @@ from .tyre import (
     TyreSearch,
     TyreStockAdjustment,
     TyreStockAdjustmentRequest,
-    TyreStockPublic
+    TyreStockPublic,
+    StockMove,
+    TyreStockPublicBase
     )
