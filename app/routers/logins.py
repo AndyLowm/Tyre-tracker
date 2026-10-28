@@ -57,7 +57,7 @@ async def get_token(
 # --------------------------------------------------------------
 
 @router.post('/signup')
-async def signup(
+def signup(
     session: Session_Dep,
     form_data: SignUp
 )-> dict[str,str]:

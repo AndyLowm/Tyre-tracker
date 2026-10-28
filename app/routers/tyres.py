@@ -13,7 +13,7 @@ router = APIRouter(tags=["Tyres"], prefix="/tyre")
 @router.post(
         "/add-tyre",status_code=status.HTTP_201_CREATED,
           response_model= schemas.TyreCreateConfirm)
-async def add_tyre(
+def add_tyre(
     session: Session_Dep,
     acc_id: Annotated[int, Depends(get_acc_id)],
     payload: schemas.TyreCreate 
@@ -28,7 +28,7 @@ async def add_tyre(
     status_code=status.HTTP_202_ACCEPTED,
     response_model= schemas.TyreInventoryPublic
     )
-async def add_stock(
+def add_stock(
     session: Session_Dep,
     tyre_id: Annotated[int, Path()],
     acc_id: Annotated[int, Depends(get_acc_id)],
@@ -54,7 +54,7 @@ async def add_stock(
 status_code= status.HTTP_200_OK,
 response_model= schemas.TyreStockPublic
 )
-async def remove_stock(
+def remove_stock(
     session: Session_Dep,
     tyre_id: Annotated[int, Path()],
     acc_id: Annotated[int, Depends(get_acc_id)],
@@ -76,7 +76,7 @@ async def remove_stock(
     status_code= status.HTTP_200_OK,
     response_model= list[schemas.TyreCostPublic]
     )
-async def search_for_tyre(
+def search_for_tyre(
         session: Session_Dep,
         acc_id: Annotated[int, Depends(get_acc_id)],
         filters: Annotated[schemas.TyreSearch, Depends()]
@@ -94,7 +94,7 @@ router.get(
     status_code= status.HTTP_200_OK,
     response_model= schemas.TyreStockPublic
     )
-async def get_tyre_stocks(
+def get_tyre_stocks(
         session: Session_Dep,
         acc_id: Annotated[int, Depends(get_acc_id)],
         tyre_id: Annotated[int, Path()]
@@ -114,7 +114,7 @@ async def get_tyre_stocks(
         status_code=status.HTTP_200_OK,
         response_model= schemas.TyreStockPublicBase
         )
-async def move_stock(
+def move_stock(
     session: Session_Dep,
     acc_id: Annotated[int, Depends(get_acc_id)],
     tyre_id: Annotated[int, Path()],
