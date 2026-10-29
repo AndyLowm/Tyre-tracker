@@ -44,7 +44,7 @@ async def get_acc_id(
     try:
         verified_acc_id = jwt.decode(jwt=token, key=env.jwt_key, algorithms=[env.jwt_algo])["sub"]
     except Exception as e:
-        print(f"🔴 Error: {str(e)}")
+        print(f"Error: {str(e)}")
         raise HTTPException(
             status_code= status.HTTP_401_UNAUTHORIZED,
             detail= "Unauthorized access",

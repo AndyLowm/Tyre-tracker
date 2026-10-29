@@ -89,7 +89,7 @@ def search_for_tyre(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail= str(e))
     return tyre_list
 
-router.get(
+@router.get(
     '/check-stock/{tyre_id}',
     status_code= status.HTTP_200_OK,
     response_model= schemas.TyreStockPublic

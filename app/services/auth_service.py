@@ -4,12 +4,17 @@ from pwdlib import PasswordHash
 from sqlmodel import select
 from app.services.utils import normalise_string
 
+hasher = PasswordHash.recommended()
+DUMMY_HASH = hasher.hash("not-a-real-password")
+
 def create_user_account(
         session: Session_Dep,
         username: str,
         password: str
 )-> None:
     normalised_username = normalise_string(username)
+    hashed_pw = hasher.hash(password=password)
+
     new_account = Account(
         acc_name= normalised_username
     )
@@ -17,8 +22,6 @@ def create_user_account(
     session.add(new_account)
     session.flush()
     
-    hasher = PasswordHash.recommended()
-    hashed_pw = hasher.hash(password=password)
     new_user = User(
         username=normalised_username,
         hash_pw=hashed_pw,
@@ -26,24 +29,25 @@ def create_user_account(
     )
     session.add(new_user)
 
+
+
+
 def verify_user(
         session: Session_Dep,
         username: str,
         password: str
-)->tuple[bool, int | None]:
-    """ Verfies username and password, runs dummy hash to prevent timing attack """
+)-> int | None:
+    """
+    Return the account id if the credentials are valid, otherwise None. 
+    Always runs one hash verification so timing doesn't reveal whether a username exists.
+    """
     normalised_username = normalise_string(username)
-    hasher = PasswordHash.recommended()
-    if len(normalised_username) > 128:
-        return False, None
-    
-    verified_user = session.exec(select(User).where(User.username == normalised_username)).first()
-    
-    if not verified_user:
-        dummy_hash = hasher.hash(password)
-        hasher.verify(password="DUMMY", hash=dummy_hash)
-        return False, None
-    pw_verified = hasher.verify(password=password, hash=verified_user.hash_pw)
-    if not pw_verified:
-        return False, None
-    return True, verified_user.acc_id
+    user = None
+    if len(normalised_username) <= 128:
+        user = session.exec(select(User).where(User.username == normalised_username)).first()
+    stored_hash = user.hash_pw if user else DUMMY_HASH
+    password_ok = hasher.verify(password=password, hash=stored_hash)
+
+    if user is None or not password_ok:
+        return None
+    return user.acc_id

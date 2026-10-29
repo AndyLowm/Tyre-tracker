@@ -1,6 +1,6 @@
-from pydantic import BaseModel, BeforeValidator, Field
+from pydantic import BaseModel, NonNegativeInt
 from typing import Annotated
-from sqlmodel import SQLModel
+from sqlmodel import SQLModel, Field
 
 from app.services.utils import normalised_string, optional_normalised_string, normalise_string
 
@@ -9,7 +9,7 @@ class TyreBase(SQLModel):
     model: normalised_string
     width: int = Field(index=True, gt=0)
     aspect_ratio: int = Field(gt=0)
-    rim: int = Field(index=True)
+    rim: int = Field(index=True, gt=0)
     speed_rating: normalised_string
 
 class TyreCostPublic(TyreBase):
@@ -33,7 +33,7 @@ class TyreSearch(BaseModel):
     speed_rating: optional_normalised_string = None
 
 class TyreStockAdjustment(BaseModel):
-    location_amount: dict[normalised_string, int] = Field(default_factory=dict)
+    location_amount: dict[normalised_string, NonNegativeInt] = Field(default_factory=dict)
 
 class TyreStockAdjustmentRequest(TyreStockAdjustment):
     cost_price: float = Field(gt=0)

@@ -112,6 +112,7 @@ def create_and_update_stock_location_rows(
                 amount= amount
             )
             session.add(new_loc_row)
+    session.flush()
     return
 
 
@@ -194,14 +195,15 @@ def add_tyre_stock_master(
         payload.cost_price,payload.location_amount, 
         old_stock_total
     )
-    
+    # tyre_data["stocks"] is now stale, expire stocks so it get read with updated stocks
+    session.expire(tyre_data, ["stocks"])
     public_tyre_dict = tyre_data.model_dump(exclude={"id", "stocks"}) | {"cost_price": AccountP.cost_price}
     public_tyre_dict["total_stock"] = tyre_data.get_stock_total(acc_id) 
     return schemas.TyreInventoryPublic(**public_tyre_dict)
 
 
 def remove_stock_master(
-     session: Session,
+    session: Session,
     payload: schemas.TyreStockAdjustment,
     acc_id: int,
     tyre_id: int
@@ -214,17 +216,20 @@ def remove_stock_master(
         .with_for_update()
     ).all()
 
-    exisiting_stocks = {s.location_name: s for s in locked_stocks}
+    existing_stocks = {s.location_name: s for s in locked_stocks}
     for loc, amount in payload.location_amount.items():
-        if loc not in exisiting_stocks:
-            raise ValueError("Location doesnt exist")
-        if amount > exisiting_stocks[loc].amount:
-            raise ValueError(f"Not enough stock in {loc}")  
-        exisiting_stocks[loc].amount -= amount
-        session.add(exisiting_stocks[loc])
+        row = existing_stocks.get(loc)
+        if row is None:
+            raise ValueError("Location doesn't exist")
+        if amount > row.amount:
+            raise ValueError(f"Not enough stock in {loc}")
 
-    new_stock_total = sum(s.amount for s in exisiting_stocks.values())
-    new_stocks = {loc: s.amount for loc, s in exisiting_stocks.items()}
+    for loc, amount in payload.location_amount.items():
+        existing_stocks[loc].amount -= amount
+        session.add(existing_stocks[loc])
+
+    new_stock_total = sum(s.amount for s in existing_stocks.values())
+    new_stocks = {loc: s.amount for loc, s in existing_stocks.items()}
     return schemas.TyreStockPublic(stock_locations=new_stocks, total_stock=new_stock_total)
 
 

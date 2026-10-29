@@ -27,8 +27,8 @@ async def get_token(
     request: Request
 )->dict[str,str]:
     username, password = form_data.username, form_data.password
-    verified, acc_id = AuthService.verify_user(session, username, password)
-    if not verified:
+    acc_id = AuthService.verify_user(session, username, password)
+    if acc_id is None:
         client_data = {
             "client_ip": request.client.host if request.client else "UNKNOWN"
         }
