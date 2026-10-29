@@ -27,7 +27,7 @@ Requires Python 3.14 and [uv](https://docs.astral.sh/uv/).
 
 1. `cp .env.example .env`
 2. Set `JWT_KEY` in `.env` (generate one with
-   `python -c "import secrets; print(secrets.token_hex(32))"`)
+   `python3 -c "import secrets; print(secrets.token_hex(32))"`)
 3. `uv sync`
 4. `uv run fastapi dev`
 
