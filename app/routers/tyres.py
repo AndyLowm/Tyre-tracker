@@ -8,6 +8,8 @@ from app.dependencies.auth_flow import get_acc_id
 from typing import Annotated
 from app import schemas
 from app import models
+from app.exceptions import TyreNotFound
+
 router = APIRouter(tags=["Tyres"], prefix="/tyre")
 #refactor this!
 @router.post(
@@ -35,17 +37,16 @@ def add_stock(
     payload: schemas.TyreStockAdjustmentRequest
 )-> schemas.TyreInventoryPublic:
     
-    tyre_data = session.get(models.Tyre,tyre_id)
-    if not tyre_data:
-        logger.info(msg="Stock update failed as tyre_id not found")
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tyre does not exist")
-
-    public_tyre_payload = TyreService.add_tyre_stock_master(
-        session,
-        acc_id,
-        tyre_data,
-        payload
-    )
+    try:
+        tyre_data = session.get(models.Tyre,tyre_id)
+        public_tyre_payload = TyreService.add_tyre_stock_master(
+            session,
+            acc_id,
+            tyre_data,
+            payload
+        )
+    except TyreNotFound as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     session.commit()
     return public_tyre_payload
 

@@ -4,7 +4,7 @@ from app import models
 from sqlmodel import select
 from sqlalchemy.orm import contains_eager
 from app.dependencies.config import logger
-from typing import TypedDict
+from typing import TypedDict, NamedTuple
 
 # =======================================================
 # VALIDATION CHECKS
@@ -15,6 +15,10 @@ class CpCalcDict(TypedDict, total=False):
     new_cost: float
     old_cost: float
     total: int
+
+class StockTotals(NamedTuple):
+    old: int
+    new:int
 
 def get_tyre_data(session: Session, payload: schemas.TyreBase)-> models.Tyre | None:
     """ Returns Tyre data if exisits in database  """
@@ -91,14 +95,21 @@ def create_and_update_stock_location_rows(
     tyre_id: int, 
     acc_id: int, 
     location_stock: dict[str,int]
-    )-> None:
-    """ Creates and updates stock amount rows in StockLocation table """
+    )-> StockTotals:
+    """
+    Creates and updates stock amount rows in StockLocation table
+
+    Returns:
+        Old stock total and new stock total
+    """
     locked_stocks = session.exec(
         select(models.StockLocation)
         .where(models.StockLocation.tyre_id == tyre_id)
         .where(models.StockLocation.acc_id == acc_id)
+        .order_by(models.StockLocation.id)
         .with_for_update()
         ).all()
+    old_stock_total = sum(s.amount for s in locked_stocks)
     existing_stock = {s.location_name: s for s in locked_stocks}
     for loc, amount in location_stock.items():
         if loc in existing_stock:
@@ -111,9 +122,11 @@ def create_and_update_stock_location_rows(
                 location_name= loc,
                 amount= amount
             )
+            existing_stock[new_loc_row.location_name] = new_loc_row
             session.add(new_loc_row)
     session.flush()
-    return
+    new_stock_total = sum(s.amount for s in existing_stock.values())
+    return StockTotals(old=old_stock_total, new=new_stock_total)
 
 
 def create_or_update_account_price(
@@ -156,9 +169,8 @@ def calc_new_cost_price(cp_dict: CpCalcDict):
 def add_tyre_master( session: Session, payload: schemas.TyreCreate, acc_id: int)->schemas.TyreCreateConfirm:
     """ Master plan for adding tyre to database """
     tyre_data = get_or_create_tyre_entry(session, payload)
-    old_stock_total = tyre_data.get_stock_total(acc_id)
 
-    create_and_update_stock_location_rows(session, tyre_data.id, acc_id, payload.location_stock)
+    totals = create_and_update_stock_location_rows(session, tyre_data.id, acc_id, payload.location_stock)
 
     updated_account_p = create_or_update_account_price(
         session,
@@ -166,13 +178,13 @@ def add_tyre_master( session: Session, payload: schemas.TyreCreate, acc_id: int)
         tyre_data.id,
         payload.cost_price,
         payload.location_stock,
-        old_stock_total
+        totals.old
         )
 
     tyre_confirm = create_tyre_confirm_model(
         tyre_data,
         updated_account_p.cost_price,
-        tyre_data.get_stock_total(acc_id)
+        totals.new
     )
     return tyre_confirm
 
@@ -184,21 +196,23 @@ def add_tyre_stock_master(
     payload: schemas.TyreStockAdjustmentRequest
     )-> schemas.TyreInventoryPublic:
     """ Master tyre addition flow """
-    old_stock_total = tyre_data.get_stock_total(acc_id)
-
-    create_and_update_stock_location_rows(
+    if tyre_data is None:
+        logger.info(msg="Stock update failed as tyre_id not found")
+        raise ValueError("Tyre does not exist")
+    
+    totals = create_and_update_stock_location_rows(
         session, tyre_data.id, acc_id, payload.location_amount
     )
     AccountP = create_or_update_account_price(
         session, acc_id, 
         tyre_data.id, 
         payload.cost_price,payload.location_amount, 
-        old_stock_total
+        totals.old
     )
-    # tyre_data["stocks"] is now stale, expire stocks so it get read with updated stocks
+    # tyre_data["stocks"] expire stocks so it gets updated if used again
     session.expire(tyre_data, ["stocks"])
     public_tyre_dict = tyre_data.model_dump(exclude={"id", "stocks"}) | {"cost_price": AccountP.cost_price}
-    public_tyre_dict["total_stock"] = tyre_data.get_stock_total(acc_id) 
+    public_tyre_dict["total_stock"] = totals.new
     return schemas.TyreInventoryPublic(**public_tyre_dict)
 
 
