@@ -8,7 +8,7 @@ from app.dependencies.auth_flow import get_acc_id
 from typing import Annotated
 from app import schemas
 from app import models
-from app.exceptions import TyreNotFound
+from app.exceptions import TyreNotFoundError, LocationError, StockError
 
 router = APIRouter(tags=["Tyres"], prefix="/tyre")
 #refactor this!
@@ -45,7 +45,7 @@ def add_stock(
             tyre_data,
             payload
         )
-    except TyreNotFound as e:
+    except TyreNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     session.commit()
     return public_tyre_payload
@@ -67,7 +67,7 @@ def remove_stock(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tyre does not exist")
     try:
         updated_tyre_public = TyreService.remove_stock_master(session, payload, acc_id, tyre_id)
-    except ValueError as e:
+    except (StockError, LocationError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail= str(e))
     session.commit()
     return updated_tyre_public
@@ -86,7 +86,7 @@ def search_for_tyre(
         tyre_list= TyreService.tyre_search(filters, session, acc_id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail= str(e))
-    except LookupError as e:
+    except TyreNotFoundError as e:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail= str(e))
     return tyre_list
 
@@ -128,7 +128,7 @@ def move_stock(
             acc_id,
             payload
         )
-    except (LookupError, ValueError) as e:
+    except (LocationError, StockError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail= str(e))
     public_stock = schemas.TyreStockPublicBase(
         stock_locations= {name: loc.amount for name, loc in stocks.items()}

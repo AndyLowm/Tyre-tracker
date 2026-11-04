@@ -5,6 +5,7 @@ from sqlmodel import select
 from sqlalchemy.orm import contains_eager
 from app.dependencies.config import logger
 from typing import TypedDict, NamedTuple
+from app.exceptions import TyreNotFoundError, LocationError, StockError
 
 # =======================================================
 # VALIDATION CHECKS
@@ -198,7 +199,7 @@ def add_tyre_stock_master(
     """ Master tyre addition flow """
     if tyre_data is None:
         logger.info(msg="Stock update failed as tyre_id not found")
-        raise ValueError("Tyre does not exist")
+        raise TyreNotFoundError("Tyre does not exist")
     
     totals = create_and_update_stock_location_rows(
         session, tyre_data.id, acc_id, payload.location_amount
@@ -234,9 +235,9 @@ def remove_stock_master(
     for loc, amount in payload.location_amount.items():
         row = existing_stocks.get(loc)
         if row is None:
-            raise ValueError("Location doesn't exist")
+            raise LocationError("Location doesn't exist")
         if amount > row.amount:
-            raise ValueError(f"Not enough stock in {loc}")
+            raise StockError(f"Not enough stock in {loc}")
 
     for loc, amount in payload.location_amount.items():
         existing_stocks[loc].amount -= amount
@@ -286,7 +287,7 @@ def tyre_search(
 
     tyres: list[tuple[models.Tyre, float]] = session.exec(statement).unique().all()
     if not tyres:
-        raise LookupError("No records found")
+        raise TyreNotFoundError("No records found")
     tyre_list = []
     for res in tyres:
         tyre_obj, cp = res
@@ -317,9 +318,9 @@ def move_stock(session: Session, tyre_id: int, acc_id: int, payload: schemas.Sto
     Moves stock from one location to another if both locations exist
     
     Errors:
-        LookupError for non existing/Invalid locations
+        LocationError for non existing/Invalid locations
 
-        ValueError for invalid stock levels
+        StockError for invalid stock levels
     """      
     if payload.from_loc == payload.to_loc:
         raise LookupError("Cannot move stock from current location to current location")
@@ -331,10 +332,10 @@ def move_stock(session: Session, tyre_id: int, acc_id: int, payload: schemas.Sto
     statement = statement.where(models.StockLocation.location_name.in_( (payload.from_loc, payload.to_loc) ))
     locations_data = session.exec(statement).all()
     if len(locations_data) < 2:
-        raise LookupError("Invalid locations")
+        raise LocationError("Invalid locations")
     loc_dict = {loc.location_name: loc for loc in locations_data}
     if loc_dict[payload.from_loc].amount < payload.amount:
-        raise ValueError("Not enough stock!")
+        raise StockError("Not enough stock!")
     loc_dict[payload.from_loc].amount -= payload.amount
     loc_dict[payload.to_loc].amount += payload.amount
     return loc_dict
