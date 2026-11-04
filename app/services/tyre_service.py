@@ -6,6 +6,7 @@ from sqlalchemy.orm import contains_eager
 from app.dependencies.config import logger
 from typing import TypedDict, NamedTuple
 from app.exceptions import TyreNotFoundError, LocationError, StockError
+from decimal import Decimal, ROUND_HALF_UP
 
 # =======================================================
 # VALIDATION CHECKS
@@ -13,8 +14,8 @@ from app.exceptions import TyreNotFoundError, LocationError, StockError
 class CpCalcDict(TypedDict, total=False):
     old_stock: int
     new_stock: int
-    new_cost: float
-    old_cost: float
+    new_cost:  Decimal
+    old_cost: Decimal
     total: int
 
 class StockTotals(NamedTuple):
@@ -51,8 +52,8 @@ def get_or_create_tyre_entry( session: Session, payload: schemas.TyreBase) -> mo
 def create_cp_dict(
     old_stock: int, 
     new_location_stock: dict[str,int],
-    new_cost_price: float,
-    old_cost_price: float
+    new_cost_price: Decimal,
+    old_cost_price: Decimal
     )-> CpCalcDict:
     """ Creates cost price dict for calculations """
     old_stock_total = old_stock
@@ -134,7 +135,7 @@ def create_or_update_account_price(
      session: Session, 
     acc_id: int,
     tyre_id: int,
-    new_cost_price: float,
+    new_cost_price: Decimal,
     new_location_stock: dict[str,int],
     old_stock_total: int
     )-> models.AccountPrices:
@@ -161,7 +162,8 @@ def calc_new_cost_price(cp_dict: CpCalcDict):
         old_stock = cp_dict['old_cost'] * cp_dict['old_stock']
         total_stock = new_stock + old_stock
         if cp_dict['total'] > 0:
-            new_price = round(total_stock / cp_dict["total"], 2)
+            value = total_stock / cp_dict["total"]
+            new_price = value.quantize(Decimal("0.01"), rounding= ROUND_HALF_UP )
         else:
             new_price = cp_dict['old_cost']
         return new_price

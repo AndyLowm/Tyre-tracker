@@ -1,6 +1,6 @@
 from sqlmodel import SQLModel, Field, UniqueConstraint
 from app.services.utils import normalised_string
-
+from decimal import Decimal
 # Import decimal and set up decimal constraint and positive constraints
 # normalise strings in here for sqlmodels, username and acc_ame
 
@@ -24,4 +24,4 @@ class AccountPrices(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     tyre_id: int = Field(foreign_key="tyre.id")
     acc_id: int = Field(foreign_key="account.id")
-    cost_price: float = Field(ge=0)
+    cost_price: Decimal = Field(ge=0, decimal_places=2, max_digits=10)

@@ -1,6 +1,7 @@
 from pydantic import BaseModel, NonNegativeInt
 from typing import Annotated
 from sqlmodel import SQLModel, Field
+from decimal import Decimal
 
 from app.services.utils import normalised_string, optional_normalised_string, normalise_string
 
@@ -13,7 +14,7 @@ class TyreBase(SQLModel):
     speed_rating: normalised_string
 
 class TyreCostPublic(TyreBase):
-    cost_price: float
+    cost_price: Decimal
 
 class TyreCreate(TyreBase):
     cost_price: float = Field(gt=0)
@@ -21,7 +22,7 @@ class TyreCreate(TyreBase):
 
 class TyreCreateConfirm(TyreBase):
     tyre_id: int 
-    cost_price: float
+    cost_price: Decimal
     stock_total: int
 
 class TyreSearch(BaseModel):
@@ -36,7 +37,7 @@ class TyreStockAdjustment(BaseModel):
     location_amount: dict[normalised_string, NonNegativeInt] = Field(default_factory=dict)
 
 class TyreStockAdjustmentRequest(TyreStockAdjustment):
-    cost_price: float = Field(gt=0)
+    cost_price: Decimal = Field(gt=0)
 
 class TyreStockPublicBase(BaseModel):
     stock_locations: dict[normalised_string, int]
@@ -45,7 +46,7 @@ class TyreStockPublic(TyreStockPublicBase):
     total_stock: int
 
 class TyreInventoryPublic(TyreBase):
-    cost_price: float = Field(gt=0)
+    cost_price: Decimal = Field(gt=0)
     total_stock: int = Field(ge=0, default=0)
 
 class StockMove(BaseModel):
