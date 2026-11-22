@@ -16,7 +16,7 @@ def view_homepage(
     session: Session_Dep
     ):
     statement = select( func.sum(models.StockLocation.amount) ) 
-    statement = statement.where(models.StockLocation == acc_id)
+    statement = statement.where(models.StockLocation.acc_id == acc_id)
     total_stock = session.exec(statement).first()
     return templates.TemplateResponse(
         name="home.html.j2", 

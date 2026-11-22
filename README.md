@@ -9,6 +9,10 @@ I'm a vehicle mechanic moving into software. Mobile fitters often keep
 stock in their head believe it or not!, so I wanted to build something
 that helps.
 
+I wrote the core API myself as a way to learn FastAPI. I started using
+Claude Code partway through to speed up the web UI work while still learning
+as I go.
+
 ## Features
 - Add tyres and stock across named locations
 - Weighted-average cost price recalculated when new stock arrives
