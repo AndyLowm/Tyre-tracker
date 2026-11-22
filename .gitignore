@@ -4,3 +4,7 @@ __pycache__/
 !.env.example
 .DS_Store
 .venv/
+app/static/css/output.css
+app_security_log.txt
+temp_db.db
+.claude/settings.local.json

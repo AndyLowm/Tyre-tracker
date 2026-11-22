@@ -17,6 +17,7 @@ entrypoint = "app.main:app"
 
 [dependency-groups]
 dev = [
+    "pytailwindcss>=0.4.2",
     "pytest>=9.2.0",
 ]
 
