@@ -5,17 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="{{ url_for('static', path='css/output.css') }}">
     <script src="/static/js/htmx.min.js"></script>
-    <title>Tyre Tracker</title>
+    <title>{% block title %}Tyre Tracker{% endblock %}</title>
 </head>
 <body>
+    {% block nav %}
     <nav>
     {% for item in nav_items %}
         <a href="{{ item.path }}">{{ item.link_name }}</a>
     {% endfor %}
     </nav>
+    {% endblock %}
     <main>
     {% block content %}
-        
+
     {% endblock %}
     </main>
 </body>

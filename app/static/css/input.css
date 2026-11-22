@@ -1,2 +1,8 @@
 @import "tailwindcss";
 @source "../../templates";
+
+@theme {
+    --color-electric-400: #4d86ff;
+    --color-electric-500: #2563ff;
+    --color-electric-600: #1448e6;
+}

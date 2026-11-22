@@ -2,12 +2,40 @@ from app.dependencies.templates import templates
 from app.dependencies.database import Session_Dep
 from app.dependencies.auth_flow import get_acc_id
 from typing import Annotated
-from fastapi import APIRouter, Request, Depends
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, Request, Depends, Form
+from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlmodel import func, select
 from app import models
+from app.services import auth_service as AuthService
+from app.routers.logins import log_failed_login, set_auth_cookie
 
 router = APIRouter(tags=["Webpages"])
+
+@router.get('/login', response_class=HTMLResponse)
+def view_login(request: Request):
+    return templates.TemplateResponse(
+        name="login.html.j2", request=request, context={"error": None}
+    )
+
+@router.post('/login', response_class=HTMLResponse)
+def submit_login(
+    request: Request,
+    session: Session_Dep,
+    username: Annotated[str, Form()],
+    password: Annotated[str, Form()],
+    ):
+    acc_id = AuthService.verify_user(session, username, password)
+    if acc_id is None:
+        log_failed_login(request)
+        return templates.TemplateResponse(
+            name="login.html.j2",
+            request=request,
+            context={"error": "Invalid username or password", "username": username},
+            status_code=401,
+        )
+    response = RedirectResponse("/", status_code=303)
+    set_auth_cookie(response, acc_id)
+    return response
 
 @router.get('/', response_class=HTMLResponse)
 def view_homepage(
