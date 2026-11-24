@@ -8,6 +8,7 @@ from sqlmodel import func, select
 from app import models
 from app.services import auth_service as AuthService
 from app.routers.logins import log_failed_login, set_auth_cookie
+from app.exceptions import InvalidCredentialsError
 
 router = APIRouter(tags=["Webpages"])
 
@@ -24,13 +25,14 @@ def submit_login(
     username: Annotated[str, Form()],
     password: Annotated[str, Form()],
     ):
-    acc_id = AuthService.verify_user(session, username, password)
-    if acc_id is None:
+    try:
+        acc_id = AuthService.verify_user(session, username, password)
+    except InvalidCredentialsError as e:
         log_failed_login(request)
         return templates.TemplateResponse(
             name="login.html.j2",
             request=request,
-            context={"error": "Invalid username or password", "username": username},
+            context={"error": str(e), "username": username},
             status_code=401,
         )
     response = RedirectResponse("/", status_code=303)

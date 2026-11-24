@@ -3,14 +3,12 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import ValidationError
 from app.dependencies.templates import templates
 from typing import Annotated
-from app.dependencies.auth_flow import get_acc_id
 from app.services.jwt_service import gen_token
 from app.services import auth_service as AuthService
 from fastapi.security import OAuth2PasswordRequestForm
 from app.dependencies.database import Session_Dep
-from app.models import User, Account
 from app.schemas.auth import SignUp
-from sqlmodel import select
+from app.exceptions import InvalidCredentialsError, SignUpError
 from app.dependencies.config import logger
 from datetime import timedelta
 import json
@@ -30,6 +28,7 @@ def set_auth_cookie(response: Response, acc_id: int) -> str:
         value=token,
         max_age=3600,
         samesite= "lax",
+        httponly=True,
         secure=False #turn back to True for production
     )
     return token
@@ -47,13 +46,13 @@ async def get_token(
     response: Response,
     request: Request
 )->dict[str,str]:
-    username, password = form_data.username, form_data.password
-    acc_id = AuthService.verify_user(session, username, password)
-    if acc_id is None:
+    try:
+        acc_id = AuthService.verify_user(session, form_data.username, form_data.password)
+    except InvalidCredentialsError as e:
         log_failed_login(request)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid credentials",
+            detail=str(e),
             headers={"WWW-Authenticate": "Bearer"}
             )
     token = set_auth_cookie(response, acc_id)
@@ -93,21 +92,13 @@ def signup(
             "Username must be 4-24 characters and password 8-128 characters",
             username, status.HTTP_422_UNPROCESSABLE_CONTENT,
         )
-    if password != confirm_password:
-        return _signup_error(
-            request, "Passwords do not match", username, status.HTTP_400_BAD_REQUEST
+    try:
+        acc_id = AuthService.create_user_account(
+            session, form_data.username, form_data.password, confirm_password
         )
-    clean_username = AuthService.normalise_string(form_data.username)
-    user_exists = session.exec(select(User).where(User.username == clean_username)).first()
-    if user_exists:
-        return _signup_error(
-            request, "Sign up failed, try a different username",
-            username, status.HTTP_400_BAD_REQUEST,
-        )
-    AuthService.create_user_account(session, clean_username, form_data.password)
+    except SignUpError as e:
+        return _signup_error(request, str(e), username, status.HTTP_400_BAD_REQUEST)
     session.commit()
-    acc_id = AuthService.verify_user(session, clean_username, form_data.password)
     response = RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
-    if acc_id is not None:
-        set_auth_cookie(response, acc_id)
+    set_auth_cookie(response, acc_id)
     return response

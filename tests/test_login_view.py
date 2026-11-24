@@ -18,7 +18,7 @@ def test_login_bad_credentials(client: TestClient):
 
 
 def test_login_success_redirects_with_cookie(client: TestClient, session: Session):
-    AuthService.create_user_account(session, "andy", "correct-horse-1")
+    AuthService.create_user_account(session, "andy", "correct-horse-1", "correct-horse-1")
     session.commit()
     res = client.post(
         "/login",

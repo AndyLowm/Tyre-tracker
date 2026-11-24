@@ -9,3 +9,8 @@ class StockError(TyreTrackerError):
 
 class LocationError(TyreTrackerError):
     pass
+class InvalidCredentialsError(TyreTrackerError):
+    pass
+
+class SignUpError(TyreTrackerError):
+    pass
