@@ -1,7 +1,7 @@
 from sqlmodel import Session
 from app import schemas
 from app import models
-from sqlmodel import select
+from sqlmodel import select, func
 from sqlalchemy.orm import contains_eager
 from app.dependencies.config import logger
 from typing import TypedDict, NamedTuple
@@ -341,3 +341,9 @@ def move_stock(session: Session, tyre_id: int, acc_id: int, payload: schemas.Sto
     loc_dict[payload.from_loc].amount -= payload.amount
     loc_dict[payload.to_loc].amount += payload.amount
     return loc_dict
+
+
+def get_total_stock(session: Session, acc_id: int) -> int:
+    """Total tyres in stock across all locations for one account."""
+    statement = select(func.sum(models.StockLocation.amount)).where(models.StockLocation.acc_id == acc_id)
+    return session.exec(statement).first() or 0

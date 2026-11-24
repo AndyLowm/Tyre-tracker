@@ -1,13 +1,11 @@
 from app.dependencies.templates import templates
 from app.dependencies.database import Session_Dep
-from app.dependencies.auth_flow import get_acc_id
+from app.dependencies.auth_flow import get_acc_id, log_failed_login, set_auth_cookie
 from typing import Annotated
 from fastapi import APIRouter, Request, Depends, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlmodel import func, select
-from app import models
 from app.services import auth_service as AuthService
-from app.routers.logins import log_failed_login, set_auth_cookie
+from app.services import tyre_service as TyreService
 from app.exceptions import InvalidCredentialsError
 
 router = APIRouter(tags=["Webpages"])
@@ -45,14 +43,12 @@ def view_homepage(
     acc_id: Annotated[int, Depends(get_acc_id)],
     session: Session_Dep
     ):
-    statement = select( func.sum(models.StockLocation.amount) ) 
-    statement = statement.where(models.StockLocation.acc_id == acc_id)
-    total_stock = session.exec(statement).first()
+    total_stock = TyreService.get_total_stock(session, acc_id)
     return templates.TemplateResponse(
         name="home.html.j2", 
         request=request,
         context={
             "stats": {
-                "total_stock": total_stock if total_stock is not None else 0
+                "total_stock": total_stock
             }
         })

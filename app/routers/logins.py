@@ -3,35 +3,14 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import ValidationError
 from app.dependencies.templates import templates
 from typing import Annotated
-from app.services.jwt_service import gen_token
 from app.services import auth_service as AuthService
 from fastapi.security import OAuth2PasswordRequestForm
 from app.dependencies.database import Session_Dep
+from app.dependencies.auth_flow import log_failed_login, set_auth_cookie
 from app.schemas.auth import SignUp
 from app.exceptions import InvalidCredentialsError, SignUpError
-from app.dependencies.config import logger
-from datetime import timedelta
-import json
 router = APIRouter(tags=["login"])
 
-def log_failed_login(request: Request) -> None:
-    client_data = {
-        "client_ip": request.client.host if request.client else "UNKNOWN"
-    }
-    logger.warning(msg=json.dumps(client_data))
-
-def set_auth_cookie(response: Response, acc_id: int) -> str:
-    jwt_expire = timedelta(minutes=60)
-    token = gen_token(payload={"sub": str(acc_id)}, exp_delta=jwt_expire)
-    response.set_cookie(
-        key="access_token",
-        value=token,
-        max_age=3600,
-        samesite= "lax",
-        httponly=True,
-        secure=False #turn back to True for production
-    )
-    return token
 
 # --------------------------------------------------------------
 # TOKEN ROUTE --------------------------------------------------

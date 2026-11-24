@@ -1,5 +1,5 @@
 from fastapi.security import APIKeyCookie
-from fastapi import Depends, HTTPException, status, Request
+from fastapi import Depends, HTTPException, status, Request, Response
 from sqlmodel import select
 from app.dependencies.database import Session_Dep
 from typing import Annotated
@@ -10,7 +10,28 @@ from pwdlib import PasswordHash
 from app.dependencies.config import logger
 from user_agents import parse
 import json
+from datetime import timedelta
+from app.services.jwt_service import gen_token
 
+
+def log_failed_login(request: Request) -> None:
+    client_data = {
+        "client_ip": request.client.host if request.client else "UNKNOWN"
+    }
+    logger.warning(msg=json.dumps(client_data))
+
+def set_auth_cookie(response: Response, acc_id: int) -> str:
+    jwt_expire = timedelta(minutes=60)
+    token = gen_token(payload={"sub": str(acc_id)}, exp_delta=jwt_expire)
+    response.set_cookie(
+        key="access_token",
+        value=token,
+        max_age=3600,
+        samesite= "lax",
+        httponly=True,
+        secure=False #turn back to True for production
+    )
+    return token
 
 async def get_acc_id(
         session: Session_Dep,
