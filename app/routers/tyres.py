@@ -8,7 +8,6 @@ from app.dependencies.auth_flow import get_acc_id
 from typing import Annotated
 from app import schemas
 from app import models
-from app.exceptions import TyreNotFoundError, LocationError, StockError
 
 router = APIRouter(tags=["Tyres"], prefix="/tyre")
 #refactor this!
@@ -36,17 +35,13 @@ def add_stock(
     acc_id: Annotated[int, Depends(get_acc_id)],
     payload: schemas.TyreStockAdjustmentRequest
 )-> schemas.TyreInventoryPublic:
-    
-    try:
-        tyre_data = session.get(models.Tyre,tyre_id)
-        public_tyre_payload = TyreService.add_tyre_stock_master(
-            session,
-            acc_id,
-            tyre_data,
-            payload
-        )
-    except TyreNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    tyre_data = session.get(models.Tyre,tyre_id)
+    public_tyre_payload = TyreService.add_tyre_stock_master(
+        session,
+        acc_id,
+        tyre_data,
+        payload
+    )
     session.commit()
     return public_tyre_payload
 
@@ -65,10 +60,7 @@ def remove_stock(
     if not tyre_data:
         logger.info(msg="Stock update failed as tyre_id not found")
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tyre does not exist")
-    try:
-        updated_tyre_public = TyreService.remove_stock_master(session, payload, acc_id, tyre_id)
-    except (StockError, LocationError) as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail= str(e))
+    updated_tyre_public = TyreService.remove_stock_master(session, payload, acc_id, tyre_id)
     session.commit()
     return updated_tyre_public
 
@@ -86,8 +78,6 @@ def search_for_tyre(
         tyre_list= TyreService.tyre_search(filters, session, acc_id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail= str(e))
-    except TyreNotFoundError as e:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail= str(e))
     return tyre_list
 
 @router.get(
@@ -121,15 +111,12 @@ def move_stock(
     tyre_id: Annotated[int, Path()],
     payload: schemas.StockMove
 )-> schemas.TyreStockPublicBase:
-    try:
-        stocks = TyreService.move_stock(
-            session,
-            tyre_id,
-            acc_id,
-            payload
-        )
-    except (LocationError, StockError) as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail= str(e))
+    stocks = TyreService.move_stock(
+        session,
+        tyre_id,
+        acc_id,
+        payload
+    )
     public_stock = schemas.TyreStockPublicBase(
         stock_locations= {name: loc.amount for name, loc in stocks.items()}
     )

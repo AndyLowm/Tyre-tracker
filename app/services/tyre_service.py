@@ -325,7 +325,7 @@ def move_stock(session: Session, tyre_id: int, acc_id: int, payload: schemas.Sto
         StockError for invalid stock levels
     """      
     if payload.from_loc == payload.to_loc:
-        raise LookupError("Cannot move stock from current location to current location")
+        raise LocationError("Cannot move stock from current location to current location")
     
     statement = select(models.StockLocation)
     statement = statement.where(
