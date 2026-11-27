@@ -41,7 +41,7 @@ def clear_auth_cookie(response: Response) -> None:
         secure=env.cookie_secure,
     )
 
-async def get_acc_id(
+def get_acc_id(
         session: Session_Dep,
         request: Request,
 )-> int:
@@ -71,15 +71,20 @@ async def get_acc_id(
         )
     
     try:
-        verified_acc_id = jwt.decode(jwt=token, key=env.jwt_key, algorithms=[env.jwt_algo])["sub"]
-    except Exception as e:
-        print(f"Error: {str(e)}")
+        verified_acc = jwt.decode(
+            jwt=token, 
+            key=env.jwt_key, 
+            algorithms=[env.jwt_algo],
+            options={"require": ["exp", "sub"]}
+            )
+    except jwt.InvalidTokenError as e:
+        logger.warning(msg= str(e))
         raise HTTPException(
             status_code= status.HTTP_401_UNAUTHORIZED,
             detail= "Unauthorized access",
             headers={"WWW-Authenticate": "Bearer"}
         )
-    acc_id = int(verified_acc_id)
+    acc_id = int(verified_acc["sub"])
     account = session.get(Account, acc_id)
     if not account:
         raise HTTPException(
