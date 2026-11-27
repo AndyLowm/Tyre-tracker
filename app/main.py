@@ -26,6 +26,13 @@ async def tyre_tracker_error_handler(request: Request, exc: TyreTrackerError) ->
         }
     )
 
+@app.middleware("http")
+async def no_cache_html(request: Request, call_next):
+    response = await call_next(request)
+    if response.headers.get("content-type", "").startswith("text/html"):
+        response.headers.setdefault("Cache-Control", "no-store")
+    return response
+
 # Mount static files path
 app.mount('/static', StaticFiles(directory='app/static'), name='static')
 # Add webpage router and remove from schema
