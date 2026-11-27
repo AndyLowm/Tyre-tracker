@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     database_url: str
     jwt_key: str
     jwt_algo: str
+    cookie_secure: bool = True
     model_config = SettingsConfigDict(
         env_file=FILE_PATH,
         env_file_encoding="utf-8"

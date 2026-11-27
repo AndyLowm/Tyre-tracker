@@ -1,11 +1,10 @@
 from app.dependencies.templates import templates
 from app.dependencies.database import Session_Dep
-from app.dependencies.auth_flow import get_acc_id, log_failed_login, set_auth_cookie
+from app.dependencies.auth_flow import get_acc_id, log_failed_login, set_auth_cookie, clear_auth_cookie
 from typing import Annotated
 from fastapi import APIRouter, Request, Depends, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from app.services import auth_service as AuthService
-from app.services import tyre_service as TyreService
 from app.exceptions import InvalidCredentialsError
 
 router = APIRouter(tags=["Webpages"])
@@ -15,6 +14,12 @@ def view_login(request: Request):
     return templates.TemplateResponse(
         name="login.html.j2", request=request, context={"error": None}
     )
+
+@router.post('/logout')
+def logout():
+    response = RedirectResponse("/login", status_code=303)
+    clear_auth_cookie(response)
+    return response
 
 @router.post('/login', response_class=HTMLResponse)
 def submit_login(
@@ -41,14 +46,5 @@ def submit_login(
 def view_homepage(
     request: Request,
     acc_id: Annotated[int, Depends(get_acc_id)],
-    session: Session_Dep
     ):
-    total_stock = TyreService.get_total_stock(session, acc_id)
-    return templates.TemplateResponse(
-        name="home.html.j2", 
-        request=request,
-        context={
-            "stats": {
-                "total_stock": total_stock
-            }
-        })
+    return templates.TemplateResponse(name="home.html.j2", request=request)

@@ -1,0 +1,39 @@
+{% extends "base.html.j2" %}
+
+{% block body %}
+<div class="min-h-screen bg-gradient-to-br from-stone-50 via-white to-sky-50 text-slate-900">
+    <header class="sticky top-0 z-10 border-b border-slate-200 bg-white/80 backdrop-blur">
+        <nav hx-boost="true" class="mx-auto flex max-w-6xl items-center gap-6 px-4 py-3">
+            <a href="/" class="flex items-center gap-2 font-semibold tracking-tight">
+                <span class="flex h-8 w-8 items-center justify-center rounded-xl bg-electric-500 text-white shadow-md shadow-electric-500/30">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/>
+                    </svg>
+                </span>
+                Tyre Tracker
+            </a>
+            <ul class="flex items-center gap-1 text-sm">
+                {% for item in nav_items %}
+                {% set active = request.url.path == item.path %}
+                <li>
+                    <a href="{{ item.path }}"
+                       {% if active %}aria-current="page"{% endif %}
+                       class="rounded-lg px-3 py-2 font-medium transition {{ 'bg-electric-500/10 text-electric-600' if active else 'text-slate-600 hover:bg-slate-100 hover:text-slate-900' }}">
+                        {{ item.link_name }}
+                    </a>
+                </li>
+                {% endfor %}
+            </ul>
+            <form method="post" action="/logout" hx-boost="false" class="ml-auto">
+                <button type="submit"
+                        class="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900">
+                    Log out
+                </button>
+            </form>
+        </nav>
+    </header>
+    <main class="mx-auto max-w-6xl px-4 py-8">
+        {% block content %}{% endblock %}
+    </main>
+</div>
+{% endblock %}

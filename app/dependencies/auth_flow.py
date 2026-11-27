@@ -29,9 +29,17 @@ def set_auth_cookie(response: Response, acc_id: int) -> str:
         max_age=3600,
         samesite= "lax",
         httponly=True,
-        secure=False #turn back to True for production
+        secure=env.cookie_secure,
     )
     return token
+
+def clear_auth_cookie(response: Response) -> None:
+    response.delete_cookie(
+        key="access_token",
+        samesite="lax",
+        httponly=True,
+        secure=env.cookie_secure,
+    )
 
 async def get_acc_id(
         session: Session_Dep,
